@@ -1,58 +1,60 @@
 # Network Everything
 
-Network Everything — нативный клиент macOS для HTTP-сервера [Everything](https://www.voidtools.com/support/everything/http/). Поиск, сортировка и фильтры выполняются на сервере. Приложение открывает найденные файлы и папки через SMB, показывает превью и запоминает поиски.
+English · [Русский](README.ru.md)
 
-Для сборки нужны macOS 14 или новее и Swift 6.2 или новее. Сторонних зависимостей нет.
+Network Everything is a native macOS client for an existing [Everything HTTP server](https://www.voidtools.com/support/everything/http/). The server handles search, sorting, and filtering. The Mac app opens matching files and folders over SMB, shows previews, and remembers searches.
 
-## Сборка
+Building requires macOS 14 or later and Swift 6.2 or later. The package has no third-party dependencies.
+
+## Build and install
 
 ```sh
-git clone --branch 0.1.0 https://github.com/ampire5/EverythingMac.git
+git clone https://github.com/ampire5/EverythingMac.git
 cd EverythingMac
 swift test
 ./scripts/build.sh --install
 open "$HOME/Applications/Network Everything.app"
 ```
 
-Без `--install` скрипт оставляет приложение в `build/Network Everything.app`. Для выбора сертификата используйте `CODE_SIGN_IDENTITY`. При локальной подписи macOS может заново запросить доступ к Keychain после пересборки.
+Omit `--install` to leave the app at `build/Network Everything.app`. Set `CODE_SIGN_IDENTITY` to choose a signing certificate. With local signing, macOS may ask for Keychain access again after a rebuild.
 
-## Подключение
+## Connect to a server
 
-1. Включите HTTP-сервер Everything на компьютере с индексом.
-2. В настройках Network Everything укажите адрес своего сервера и, если нужно, логин и пароль. Для HTTP Basic используйте HTTPS или доверенную локальную сеть.
-3. Чтобы открывать результаты, сопоставьте Windows-путь с той же папкой на SMB-ресурсе. Пункт «Из подключённых» позволяет выбрать ресурс, уже открытый в Finder.
+1. Enable the Everything HTTP server on the Windows computer that holds the index.
+2. In Network Everything settings, enter your server address and any required username and password. Use HTTPS or a trusted local network when connecting with HTTP Basic authentication.
+3. To open results on your Mac, map a Windows path to the same folder on an SMB share. The mounted-shares picker can use a share already connected in Finder.
 
-Например, `C:\Photos`, `smb://server/Photos` и `/Volumes/Photos` должны указывать на одну папку. Если ресурс отключён, откройте его через Finder и нажмите «Повторить». Поиск доступен и без подключённого SMB-ресурса.
+For example, `C:\Photos`, `smb://server/Photos`, and `/Volumes/Photos` should all refer to the same folder. If the share is disconnected, connect to it in Finder and retry. Search works while the share is disconnected.
 
-## Поиск
+## Search and browse
 
-Строка принимает синтаксис Everything, например `ext:jpg fox`. Нажмите заголовок колонки для сортировки. Можно ограничить выдачу типом файлов или папкой, сохранить запрос в закладки либо вернуться к предыдущему поиску.
+Enter an Everything query such as `ext:jpg fox`. Click a column header to sort the results. You can filter by file type or folder, bookmark a query, or return to an earlier search.
 
-| Клавиши | Действие |
+| Shortcut | Action |
 | --- | --- |
-| ⌘F | Перейти к поиску |
-| ⌘N / ⌘T | Новое окно / вкладка |
-| ⌘D | Сохранить текущий запрос |
-| ⌘[ / ⌘] | Назад / вперёд по истории окна |
-| Return в таблице | Открыть выбранный результат |
-| Пробел в таблице | Показать или скрыть превью |
-| ⌘R | Показать результат в Finder |
+| ⌘F | Focus search |
+| ⌘N / ⌘T | Open a new window or tab |
+| ⌘D | Bookmark the current search |
+| ⌘[ / ⌘] | Go back or forward in the window's search history |
+| Return in the results table | Open the selected result |
+| Space in the results table | Show or hide the preview |
+| ⌘R | Reveal the result in Finder |
 
-Команда удаления требует явного подтверждения. На SMB-ресурсе она удаляет выбранные файлы без перемещения в Корзину.
+Deleting files requires confirmation. On an SMB share, confirmed deletion removes the selected files without moving them to the Trash.
 
-## Встраивание в Loupe и другие приложения
+## Embed search in Loupe or another app
 
-Добавьте пакет в `Package.swift` и подключите продукт `EverythingSearchUI` к целевому модулю приложения.
+Add EverythingMac to your package dependencies and add the `EverythingSearchUI` product to your app target.
 
 ```swift
 .package(url: "https://github.com/ampire5/EverythingMac.git", from: "0.1.0")
 .product(name: "EverythingSearchUI", package: "EverythingMac")
 ```
 
-Создайте `EverythingSearchPage` для окна. Передайте загрузчик настроек соединения и обработчик открытия локального файла или папки. Если пользователь уже настроил Network Everything, можно передать `SavedEverythingConnection.load`. При первом чтении пароля macOS может запросить доступ к записи Keychain для приложения-хоста.
+Create an `EverythingSearchPage` for each AppKit window. Supply a connection loader and a handler that opens a resolved local file or folder. Apps can use `SavedEverythingConnection.load` when the user has already configured Network Everything. The first attempt to read the password may prompt for Keychain access.
 
-Обычная сборка Loupe показывает **Everything** в Home после сохранения подключения в Network Everything. Для каждого приложения поиск и закладки сохраняются в его собственных настройках.
+Loupe shows **Everything** in Home once a connection is saved in Network Everything. Each host app keeps its own search settings and bookmarks.
 
-## Данные и настройки
+## Local data
 
-Адрес сервера, логин и сопоставления хранятся локально. Пароль хранится в macOS Keychain. Результаты поиска используются в памяти. Закладки, недавние запросы и история приложений для открытия сохраняются на Mac. Для подключения используйте свой сервер и свои SMB-ресурсы.
+Server addresses, usernames, and SMB mappings are stored locally. Passwords are stored in macOS Keychain. Search results stay in memory. Bookmarks, recent searches, and the list of recently used apps for opening files are stored on the Mac.
