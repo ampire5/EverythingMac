@@ -16,10 +16,12 @@ import Combine
     private var task: Task<Void, Never>?
     private var nextOffset = 0
     private var currentOffset: Int?
+    private var failedOffset: Int?
     private var suspended = false
     private var deletedInCurrentSearch: [SearchResult] = []
     private var changingSearch = false
     public var hasMore: Bool { nextOffset < total }
+    package var loadingMore: Bool { busy && (currentOffset ?? 0) > 0 }
     public init(delay: UInt64 = 200_000_000, loader: @escaping Loader) { self.loader = loader; self.delay = delay }
     public func restart() {
         restart(keepingRows: false)
@@ -34,7 +36,7 @@ import Combine
         task?.cancel()
         generation = UUID()
         if !keepingRows { rows = []; total = 0 }
-        nextOffset = 0; error = nil; deletedInCurrentSearch = []
+        nextOffset = 0; failedOffset = nil; error = nil; deletedInCurrentSearch = []
         fetch(offset: 0, debounce: true)
     }
     public func setSort(_ value: SearchSort) {
@@ -57,9 +59,14 @@ import Combine
     }
 
     public func loadMore() {
-        guard !suspended, !busy, hasMore else { return }
-        error = nil
+        guard !suspended, !busy, failedOffset == nil, hasMore else { return }
         fetch(offset: nextOffset, debounce: false)
+    }
+    package func retry() {
+        guard !suspended, !busy, let offset = failedOffset else { return }
+        failedOffset = nil
+        error = nil
+        fetch(offset: offset, debounce: false)
     }
     public func removeDeleted(_ results: [SearchResult]) {
         deletedInCurrentSearch += results
@@ -96,8 +103,11 @@ import Combine
             } catch {
                 guard self.generation == token else { return }
                 self.currentOffset = nil
+                if !(error is CancellationError) {
+                    self.failedOffset = offset
+                    self.error = error.localizedDescription
+                }
                 self.busy = false
-                if !(error is CancellationError) { self.error = error.localizedDescription }
             }
         }
     }

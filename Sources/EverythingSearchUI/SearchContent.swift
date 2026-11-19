@@ -39,9 +39,7 @@ package struct SearchContent: View {
                     SearchNavigationControls(session: session)
                     NativeSearchField(text: Binding(get: { model.query }, set: session.editQuery), windowID: session.id, onCommit: session.commitQuery)
                         .frame(height: 32)
-                    ZStack {
-                        if model.busy { ProgressView().controlSize(.small).accessibilityLabel("Поиск") }
-                    }.frame(width: 16, height: 16)
+                        .layoutPriority(1)
                     HStack(spacing: 4) {
                         RecentSearchMenu(session: session, library: library)
                         queryMenu
@@ -63,7 +61,8 @@ package struct SearchContent: View {
                 }
                 SearchFilters(session: session, model: model)
             }
-            .padding(.horizontal, 16).padding(.vertical, 12)
+            .padding(.horizontal, 16).padding(.vertical, 10)
+            .background(Color(nsColor: .windowBackgroundColor))
             Divider()
             if let error = model.error { errorBanner(error) }
             if let error = library.error {
@@ -114,20 +113,7 @@ package struct SearchContent: View {
                 }
             }
             Divider()
-            HStack(spacing: 12) {
-                Text(resultCount).monospacedDigit()
-                if model.hasMore && !model.busy { Button("Ещё") { model.loadMore() }.buttonStyle(.link) }
-                Spacer()
-                if deletion.working { ProgressView().controlSize(.mini); Text("Удаление…") }
-                if actions.working { ProgressView().controlSize(.mini); Text("Открытие…") }
-                if !session.selected.isEmpty {
-                    Text("Выбрано \(session.selected.count.formatted())").monospacedDigit()
-                }
-                Divider().frame(height: 12)
-                Text(standalone ? "↩ Открыть  ·  Пробел Превью  ·  ⌘C Путь" : "↩ Открыть  ·  ⌘C Путь")
-            }
-            .font(.callout).foregroundStyle(.secondary)
-            .padding(.horizontal, 16).frame(height: 32)
+            statusBar
         }
         .background(Color(nsColor: .windowBackgroundColor))
         .coordinateSpace(name: "SearchContent")
@@ -181,14 +167,14 @@ package struct SearchContent: View {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Сетевая папка не подключена").font(.title2.weight(.medium))
                 Text(pending.mapping.shareURL).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
-                Text("Подключите папку в Finder, затем повторите действие с выбранными файлами. Finder запросит учётные данные SMB при необходимости.")
+                Text("Откройте сетевую папку в Finder. Если Finder запросит пароль SMB, введите его там. После подключения нажмите «Повторить действие».")
                     .foregroundStyle(.secondary)
                 HStack(spacing: 8) {
                     Button("Отмена", role: .cancel) { actions.pending = nil }
                     if standalone { Button("Настройки") { actions.pending = nil; openSettings() } }
                     Spacer()
-                    Button("Подключить в Finder") { actions.connect() }
-                    Button("Повторить") { actions.retry(mappings: session.mappings, library: library) }.keyboardShortcut(.defaultAction)
+                    Button("Открыть в Finder") { actions.connect() }.keyboardShortcut(.defaultAction)
+                    Button("Повторить действие") { actions.retry(mappings: session.mappings, library: library) }
                 }
             }.padding(24).frame(width: 560)
         }
@@ -200,21 +186,58 @@ package struct SearchContent: View {
         guard !preview.pinned, !reduceMotion else { return nil }
         return preview.visible ? .interpolatingSpring(mass: 1, stiffness: 300, damping: 28.4) : .easeOut(duration: 0.15)
     }
-    private var resultCount: String {
-        if model.busy && model.rows.isEmpty { return "Поиск…" }
+    private var statusBar: some View {
+        HStack(spacing: 10) {
+            if model.busy { ProgressView().controlSize(.mini).accessibilityHidden(true) }
+            Text(searchStatus).monospacedDigit().lineLimit(1)
+            if model.hasMore && !model.busy && model.error == nil {
+                Button("Загрузить ещё") { model.loadMore() }
+                    .buttonStyle(.link).foregroundStyle(Color.accentColor)
+            }
+            Spacer(minLength: 4)
+            if deletion.working || actions.working {
+                ProgressView().controlSize(.mini).accessibilityHidden(true)
+                Text(deletion.working ? "Удаление…" : "Открытие…")
+            } else if !session.selected.isEmpty {
+                Text("Выбрано \(session.selected.count.formatted())").monospacedDigit().fixedSize()
+            }
+        }
+        .font(.callout).foregroundStyle(.secondary)
+        .padding(.horizontal, 16).frame(minHeight: 32)
+    }
+    private var searchStatus: String {
+        if model.busy {
+            if model.loadingMore { return "Загрузка следующей страницы…" }
+            return model.rows.isEmpty ? "Поиск…" : "Обновление результатов…"
+        }
+        if model.error != nil {
+            return model.rows.isEmpty ? "Поиск прерван" : "Показаны ранее загруженные результаты"
+        }
         if model.rows.count == model.total { return "Найдено \(model.total.formatted())" }
-        return "Показано \(model.rows.count.formatted()) из \(model.total.formatted())"
+        return "\(model.rows.count.formatted()) из \(model.total.formatted())"
     }
     private var resultsArea: some View {
-        ZStack(alignment: .topLeading) {
+        ZStack {
             ResultsTable(rows: model.rows, fontSize: resultsFontSize, windowID: session.id, applications: library.state.applications, sort: Binding(get: { model.sort }, set: session.setSort), selection: { session.selected = $0 }, perform: { session.perform($0, results: $1) }, more: { model.loadMore() }, restoration: session.tableRestoration, standalone: standalone, viewport: { [state = session.state] in session.updateLocation($0, for: state) })
-            if model.rows.isEmpty && !model.busy && model.error == nil {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Ничего не найдено").font(.headline)
-                    Text("Измените запрос или фильтры").font(.callout).foregroundStyle(.secondary)
+            if started || !standalone, model.rows.isEmpty && !model.busy && model.error == nil {
+                let filtered = model.scope != SearchScope()
+                VStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass").font(.system(size: 24, weight: .regular))
+                        .foregroundStyle(.secondary).accessibilityHidden(true)
+                    Text(model.query.isEmpty && !filtered ? "Индекс Everything пуст" : "Совпадений нет")
+                        .font(.headline).accessibilityAddTraits(.isHeader)
+                    Text(filtered ? "Попробуйте поиск по всем типам файлов и папкам." :
+                            model.query.isEmpty ? "Проверьте, какие папки индексирует Everything." : "Уточните имя файла или попробуйте более короткий запрос.")
+                        .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if filtered {
+                        Button("Сбросить фильтры") { session.setScope(.init()) }.buttonStyle(.link)
+                    } else if !model.query.isEmpty {
+                        Button("Изменить запрос") { session.focusSearch() }.buttonStyle(.link)
+                    }
                 }
-                .padding(.leading, 16).padding(.top, 52)
-                .allowsHitTesting(false)
+                .frame(maxWidth: 340)
+                .padding(.horizontal, 16)
             }
         }
     }
@@ -242,12 +265,19 @@ package struct SearchContent: View {
     private func errorBanner(_ error: String) -> some View {
         VStack(spacing: 0) {
             HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "exclamationmark.triangle").foregroundStyle(.secondary)
-                Text(error).textSelection(.enabled)
-                Spacer()
-                Button("Повторить") { if model.rows.isEmpty { model.restart() } else { model.loadMore() } }
-                if standalone { SettingsLink { Text("Настройки") } }
-            }.padding(.horizontal, 16).padding(.vertical, 8).background(Color(nsColor: .controlBackgroundColor))
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Color(nsColor: .systemOrange))
+                    .accessibilityHidden(true).padding(.top, 2)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Не удалось загрузить результаты").font(.callout.weight(.semibold))
+                    Text(error).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                HStack(spacing: 8) {
+                    if standalone { SettingsLink { Text("Настройки") } }
+                    Button("Повторить") { model.retry() }
+                }.fixedSize()
+            }.padding(.horizontal, 16).padding(.vertical, 10).background(Color(nsColor: .controlBackgroundColor))
             Divider()
         }
     }

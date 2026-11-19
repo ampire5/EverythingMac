@@ -53,6 +53,8 @@ struct ResultsTable: NSViewRepresentable {
         let scroll = ResultsScrollView()
         let table = FileTableView()
         context.coordinator.table = table
+        table.setAccessibilityLabel("Результаты поиска")
+        table.usesAlternatingRowBackgroundColors = !rows.isEmpty
         table.allowsMultipleSelection = true
         table.rowHeight = ceil(max(11.5, min(14, fontSize)) + 12)
         table.configureColumns()
@@ -100,6 +102,7 @@ struct ResultsTable: NSViewRepresentable {
         // so even that update uses the current model rather than its old snapshot.
         c.applySort(currentSort, to: table)
         if changed || fontChanged {
+            table.usesAlternatingRowBackgroundColors = !rows.isEmpty
             table.rowHeight = ceil(max(11.5, min(14, fontSize)) + 12)
             c.updateMetadataWidths()
             table.fitColumns(to: scroll.contentSize.width, force: true)

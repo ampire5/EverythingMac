@@ -57,8 +57,17 @@ final class SearchTests: XCTestCase {
         let next = await loader.next()
         XCTAssertEqual(next.offset, 2)
         XCTAssertEqual(next.sort, .init(field: "size", ascending: false))
-        next.continuation.resume(returning: .init(totalResults: 3, results: [.init(name: "ball", path: "C:")]))
+        next.continuation.resume(throwing: SearchFailure.unavailable)
         await waitForCompletion(loader, count: 3)
+        XCTAssertEqual(model.rows.map(\.name), ["dog", "cat"])
+        XCTAssertNotNil(model.error)
+
+        model.retry()
+        let retry = await loader.next()
+        XCTAssertEqual(retry.offset, 2)
+        XCTAssertEqual(retry.sort, next.sort)
+        retry.continuation.resume(returning: .init(totalResults: 3, results: [.init(name: "ball", path: "C:")]))
+        await waitForCompletion(loader, count: 4)
         XCTAssertEqual(model.rows.map(\.name), ["dog", "cat", "ball"])
     }
     @MainActor func testLateSortResponseCannotReplaceRetainedOrNewerRows() async {
@@ -95,12 +104,24 @@ final class SearchTests: XCTestCase {
         XCTAssertEqual(model.total, 2)
         XCTAssertNotNil(model.error)
         XCTAssertFalse(model.busy)
-        model.query = "dog"
+        model.loadMore()
+        XCTAssertFalse(model.busy, "Scrolling must leave a failed request available for explicit retry")
+        XCTAssertNotNil(model.error)
+        model.retry()
+        XCTAssertEqual(model.rows.map(\.name), ["cat"])
+        let retry = await loader.next()
+        XCTAssertEqual(retry.sort, sorted.sort)
+        XCTAssertEqual(retry.offset, 0)
+        retry.continuation.resume(returning: .init(totalResults: 1, results: [.init(name: "dog", path: "C:")]))
+        await waitForCompletion(loader, count: 3)
+        XCTAssertEqual(model.rows.map(\.name), ["dog"])
+        XCTAssertNil(model.error)
+        model.query = "ball"
         XCTAssertTrue(model.rows.isEmpty)
         XCTAssertEqual(model.total, 0)
         let query = await loader.next()
         query.continuation.resume(returning: .init(totalResults: 0, results: []))
-        await waitForCompletion(loader, count: 3)
+        await waitForCompletion(loader, count: 4)
     }
     @MainActor func testSuspendingPaginationPreservesRowsAndDiscardsLateResults() async {
         let loader = SortLoader()

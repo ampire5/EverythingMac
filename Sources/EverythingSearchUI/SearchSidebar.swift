@@ -18,12 +18,15 @@ struct SearchSidebar: View {
             VStack(spacing: 0) {
                 HStack(spacing: 4) {
                     Button { controller.favoritesExpanded.toggle() } label: {
-                        Label("Избранное", systemImage: controller.favoritesExpanded ? "chevron.down" : "chevron.right")
+                        Label("Закладки", systemImage: controller.favoritesExpanded ? "chevron.down" : "chevron.right")
                             .font(.callout.weight(.medium))
-                    }.help(controller.favoritesExpanded ? "Свернуть избранные запросы" : "Развернуть избранные запросы")
+                    }.help(controller.favoritesExpanded ? "Свернуть закладки" : "Развернуть закладки")
+                        .accessibilityValue(controller.favoritesExpanded ? "Развёрнуто" : "Свёрнуто")
                     Spacer(minLength: 0)
-                    Button(action: saveQuery) { Image(systemName: "plus").frame(width: 24, height: 24) }
-                        .help("Сохранить текущий запрос").accessibilityLabel("Сохранить текущий запрос")
+                    if !controller.favoritesExpanded || !library.state.savedQueries.isEmpty {
+                        Button(action: saveQuery) { Image(systemName: "plus").frame(width: 24, height: 24) }
+                            .help("Сохранить текущий запрос").accessibilityLabel("Сохранить текущий запрос")
+                    }
                     Button { controller.pinned.toggle() } label: {
                         Image(systemName: controller.pinned ? "pin.fill" : "pin").frame(width: 24, height: 24)
                     }.help(controller.pinned ? "Открепить панель" : "Закрепить панель")
@@ -62,7 +65,7 @@ struct SearchSidebar: View {
                                     .accessibilityAddTraits(active ? .isSelected : [])
                                     .help(saved.query.isEmpty ? "Все результаты" : saved.query)
                                     .contextMenu {
-                                        Button("Удалить из избранного", role: .destructive) {
+                                        Button("Удалить закладку", role: .destructive) {
                                             do { try library.removeQuery(saved.id) } catch { reportError(error.localizedDescription) }
                                         }
                                     }

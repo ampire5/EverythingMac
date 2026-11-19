@@ -112,34 +112,51 @@ struct LocalQuickLook: NSViewRepresentable {
     static func dismantleNSView(_ view: QuickLookHostView, coordinator: ()) { view.finish() }
 }
 struct FilePreviewPanel: View {
+    private struct Request: Equatable {
+        let path: String?
+        let mappings: [PathMapping]
+    }
+    private enum Content {
+        case file(URL)
+        case unavailable(String)
+    }
+
     let result: SearchResult?
     let mappings: [PathMapping]
-    @State private var url: URL?
-    @State private var error: String?
-    private var requestID: String { (result?.id ?? "") + String(describing: mappings) }
+    @State private var loaded: (request: Request, content: Content)?
+
     var body: some View {
+        let request = Request(path: result?.id, mappings: mappings)
         VStack(spacing: 0) {
             Text("Превью").font(.callout.weight(.medium)).foregroundStyle(.secondary)
+                .accessibilityAddTraits(.isHeader)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16).padding(.vertical, 12)
             if let result {
                 Text(result.name).font(.headline).lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 16).padding(.bottom, 12)
-                if let url {
+                let content = loaded?.request == request ? loaded?.content : nil
+                switch content {
+                case .file(let url):
                     Group {
                         if let type = UTType(filenameExtension: url.pathExtension), type.conforms(to: .movie) || type.conforms(to: .audio) {
                             MediaPreview(url: url)
                         } else { LocalQuickLook(url: url) }
                     }.id(url).frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-                else if let error {
-                    Text(error).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
+                case .unavailable(let message):
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Превью недоступно").font(.callout.weight(.semibold))
+                        Text(message).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
+                    }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 16)
                     Spacer()
+                case nil:
+                    Spacer()
+                    ProgressView().controlSize(.small).accessibilityLabel("Загрузка превью")
+                    Spacer()
                 }
-                else { Spacer(); ProgressView(); Spacer() }
                 Divider()
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Путь Windows").font(.caption).foregroundStyle(.secondary)
@@ -149,21 +166,24 @@ struct FilePreviewPanel: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16).padding(.vertical, 12)
             } else {
-                Text("Выберите файл в результатах").font(.callout).foregroundStyle(.secondary)
+                Text("Выберите строку в результатах").font(.callout).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 16)
                 Spacer()
             }
         }
-        .task(id: requestID) {
-            url = nil; error = nil
+        .task(id: request) {
+            loaded = nil
             guard let result else { return }
             do {
                 let urls = try await FileAccess.resolve([result], mappings: mappings)
                 try Task.checkCancellation()
-                url = urls.first
+                let content = urls.first.map(Content.file) ?? .unavailable("Не удалось открыть выбранный объект.")
+                loaded = (request, content)
             } catch is CancellationError { }
-            catch { if !Task.isCancelled { self.error = error.localizedDescription } }
+            catch {
+                if !Task.isCancelled { loaded = (request, .unavailable(error.localizedDescription)) }
+            }
         }
     }
 }
@@ -191,6 +211,16 @@ struct PreviewResizeHandle: View {
             .onDisappear { controller.isResizing = false }
             .help("Потяните, чтобы изменить ширину превью")
             .accessibilityLabel("Ширина панели превью")
+            .accessibilityValue("\(Int(controller.width(available: availableWidth))) пт")
+            .accessibilityAdjustableAction { direction in
+                let width = controller.width(available: availableWidth)
+                switch direction {
+                case .increment: controller.preferredWidth = PreviewSizing.width(preferred: width + 32, available: availableWidth)
+                case .decrement: controller.preferredWidth = PreviewSizing.width(preferred: width - 32, available: availableWidth)
+                @unknown default: return
+                }
+                controller.saveWidth()
+            }
     }
 }
 

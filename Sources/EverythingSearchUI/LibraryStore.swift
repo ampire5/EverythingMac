@@ -108,7 +108,7 @@ struct LibraryState: Codable, Equatable {
                 let folder = fileURL.deletingLastPathComponent()
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
                 let data = try JSONEncoder().encode(next)
-                try data.write(to: fileURL, options: [.atomic, .completeFileProtectionUnlessOpen])
+                try data.write(to: fileURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
                 try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
             }
             state = next
