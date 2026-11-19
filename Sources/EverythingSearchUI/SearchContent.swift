@@ -218,7 +218,7 @@ package struct SearchContent: View {
     }
     private var resultsArea: some View {
         ZStack {
-            ResultsTable(rows: model.rows, fontSize: resultsFontSize, windowID: session.id, applications: library.state.applications, sort: Binding(get: { model.sort }, set: session.setSort), selection: { session.selected = $0 }, perform: { session.perform($0, results: $1) }, more: { model.loadMore() }, restoration: session.tableRestoration, standalone: standalone, viewport: { [state = session.state] in session.updateLocation($0, for: state) })
+            ResultsTable(rows: model.rows, fontSize: resultsFontSize, windowID: session.id, applications: library.state.applications, sort: Binding(get: { model.sort }, set: { value, _ in session.setSort(value) }), selection: { session.selected = $0 }, perform: { session.perform($0, results: $1) }, more: { model.loadMore() }, restoration: session.tableRestoration, standalone: standalone, viewport: { [state = session.state] in session.updateLocation($0, for: state) })
             if started || !standalone, model.rows.isEmpty && !model.busy && model.error == nil {
                 let filtered = model.scope != SearchScope()
                 VStack(spacing: 8) {
