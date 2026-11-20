@@ -72,7 +72,7 @@ struct SearchFilters: View {
         kindPicker.pickerStyle(.segmented).labelsHidden().frame(width: 560)
     }
     private var kindPicker: some View {
-        Picker("Тип файлов", selection: Binding(get: { model.scope.kind }, set: { kind in
+        Picker("Тип файлов", selection: Binding(get: { model.scope.kind }, set: { kind, _ in
             var scope = model.scope; scope.kind = kind; session.setScope(scope)
         })) {
             ForEach(SearchKind.allCases, id: \.self) { kind in Text(kind.title).tag(kind) }

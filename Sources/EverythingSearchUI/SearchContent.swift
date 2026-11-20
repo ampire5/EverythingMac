@@ -37,7 +37,7 @@ package struct SearchContent: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
                     SearchNavigationControls(session: session)
-                    NativeSearchField(text: Binding(get: { model.query }, set: session.editQuery), windowID: session.id, onCommit: session.commitQuery)
+                    NativeSearchField(text: Binding(get: { model.query }, set: { value, _ in session.editQuery(value) }), windowID: session.id, onCommit: session.commitQuery)
                         .frame(height: 32)
                         .layoutPriority(1)
                     HStack(spacing: 4) {
@@ -155,7 +155,7 @@ package struct SearchContent: View {
             Button("Отмена", role: .cancel) { }
             Button("Сохранить") { session.saveQuery() }.disabled(session.bookmarkName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         } message: { Text("Сохраняются запрос, сортировка, тип файлов и папка поиска. Совпадающее название обновляет закладку.") }
-        .alert("Действие с файлом", isPresented: Binding(get: { actions.message != nil }, set: { if !$0 { actions.message = nil } })) {
+        .alert("Действие с файлом", isPresented: Binding(get: { actions.message != nil }, set: { shown, _ in if !shown { actions.message = nil } })) {
             if standalone { Button("Настройки") { openSettings() } }
             Button("OK", role: .cancel) { actions.message = nil }
         } message: { Text(actions.message ?? "") }
